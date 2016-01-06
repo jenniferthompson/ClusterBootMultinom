@@ -48,6 +48,11 @@
 #'                                ref.outcome = grep('A', levels(df$y)),
 #'                                multi.form = as.formula('y ~ x1 + x2'))
 #'
+#' ## Create matrices of coefficients for all bootstrap fits
+#' boot.matrix.a <- do.call(rbind,
+#'                          lapply(boot.fits.a$boot.models,
+#'                                 FUN = function(x){ x@@coefficients }))
+#'
 #' ## Calculate and plot odds ratios and CIs, Wald p-values for x2
 #' covariate.ors <- multi.plot.ors(coef.list = list(boot.matrix.a),
 #'                                 out.strings = list(c('B vs A', 'C vs A')),
@@ -112,7 +117,7 @@ multi.plot.ors <-
 
     ## Set Y value - start at integer, add 0.25 for each outcome comparison
     plot.data$yval <- unlist(lapply(1:nrow(plot.data), FUN = function(x){
-      grep(plot.data$varlabel[x], sort(unique(plot.data$varlabel))) +
+      match(plot.data$varlabel[x], sort(unique(plot.data$varlabel))) +
         (plot.data$out.order[x] - 1) * -yval.offset }))
 
     ## Create vector of strings for Y axis
@@ -130,7 +135,7 @@ multi.plot.ors <-
       scale_colour_discrete(guide = FALSE) +
       scale_x_continuous(name = 'Odds Ratio (95% CI) for 1-Unit Increase') +
       scale_y_continuous(name = '',
-                         breaks = sort(unique(ceil(plot.data$yval))),
+                         breaks = sort(unique(ceiling(plot.data$yval))),
                          labels = plot.ytext) +
       theme(axis.text.y = element_text(vjust = 0.8))
 
