@@ -45,7 +45,7 @@ create.sampdata <- function(org.data,         ## original data set
     samp.ids <- sample(all.ids, size = length(all.ids), replace = TRUE)
 
     final.data <- bind_rows(lapply(samp.ids, FUN = function(y){
-      org.data[org.data$id == y,]
+      org.data[org.data[,id.var] == y,]
     }))
 
     return(final.data)
