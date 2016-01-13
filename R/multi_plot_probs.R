@@ -100,6 +100,10 @@ multi.plot.probs <-
     coef.list, ## list of bootstrapped coefficient matrices
     vcov.list = NULL, ## list of variance-covariance matrices
     plot.raw = TRUE ## Add raw data to final plot?
+    xval.lab = NULL, ## X axis label (in addition to p-values)
+    yval.lab = 'Adjusted Probability of Outcome', ## Y axis label
+    yval.limits = c(0, 1), ## limits for Y axis
+    alpha.lev = 1 ## transparency level of CI ribbons
   ){
 
   ## -- Error checking -- ##
@@ -280,18 +284,21 @@ multi.plot.probs <-
                      collapse = '\n'))
 
     ## -- Plot predicted probabilities + CIs -- ##
-    ## Is xval labeled in original data set?
-    xval.lab <- Hmisc::label(data.set[,xval])
-    xval.lab <- ifelse(xval.lab == '', xval, xval.lab)
+    ## Get X label: if no label specified in arguments, default is variable label in data.set or
+    ## variable name if unlabeled
+    if(is.null(xval.lab)){
+      ## Is xval labeled in original data set?
+      xval.lab <- Hmisc::label(data.set[,xval])
+      xval.lab <- ifelse(xval.lab == '', xval, xval.lab)
+    }
 
     xval.probs <- ggplot(aes(x = xval.vals, y = pp), data = pp.data) +
       facet_wrap( ~ outcome) +
-      geom_ribbon(aes(ymin = lcl, ymax = ucl), fill = 'grey80') +
+      geom_ribbon(aes(ymin = lcl, ymax = ucl), fill = 'grey80', alpha = alpha.lev) +
       geom_line(aes(colour = outcome)) +
       scale_colour_discrete(guide = FALSE) +
       scale_x_continuous(name = paste(xval.lab, p.text, sep = '\n\n')) +
-      scale_y_continuous(limits = 0:1,
-                         name='Adjusted Probability of Outcome\nAdjusted to Median or Mode of Covariates')
+      scale_y_continuous(limits = yval.limits, name = yval.lab)
 
     ## -- Plot raw data -- ##
     if(plot.raw){
