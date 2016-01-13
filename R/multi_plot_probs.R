@@ -27,6 +27,11 @@
 #' @param vcov.list List of variance-covariance matrices of coefficient estimates. Defaults to
 #'   a list of var(coef.list[[x]]).
 #' @param plot.raw Add raw data to plots? Defaults to TRUE.
+#' @param xval.lab String to combine with Wald p-values for X axis label. If not specified, defaults
+#'   to either label of data.set[,xval] if labelled, or xval if not labeled.
+#' @param yval.lab String to use for Y axis label. Defaults to 'Adjusted Probability of Outcome.'
+#' @param yval.limits Numeric vector for Y axis limits. Defaults to c(0, 1).
+#' @param alpha.lev Numeric value for transparency level of CI ribbons. Defaults to 1.
 #' @return List of 1) Data frame of all predicted probabilities and confidence
 #'   limits (\code{pp.data}); 2) Data frame of Wald test results for each outcome
 #'   comparison (\code{results.data}); 3) ggplot2 object which contains plots of
