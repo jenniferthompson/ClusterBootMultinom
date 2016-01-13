@@ -104,7 +104,7 @@ multi.plot.probs <-
     mod.objs, ## list of model objects
     coef.list, ## list of bootstrapped coefficient matrices
     vcov.list = NULL, ## list of variance-covariance matrices
-    plot.raw = TRUE ## Add raw data to final plot?
+    plot.raw = TRUE, ## Add raw data to final plot?
     xval.lab = NULL, ## X axis label (in addition to p-values)
     yval.lab = 'Adjusted Probability of Outcome', ## Y axis label
     yval.limits = c(0, 1), ## limits for Y axis
