@@ -115,7 +115,7 @@ multi.plot.probs <-
     stop("Column names of all elements in coef.list should be equal")
   ## Names of adjto.vals should match coefficient names in coef.list
   } else if(is.null(names(adjto.vals)) |
-            length(adjto.vals) ~= length(nolevel.colnames) |
+            length(adjto.vals) != length(nolevel.colnames) |
             sum(sort(names(adjto.vals)) != sort(nolevel.colnames)) > 0){
     stop("adjto.vals should be a named vector with names = column names of elements of coef.list, excluding ':x' suffix")
   } else{
