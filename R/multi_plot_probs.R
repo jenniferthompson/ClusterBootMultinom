@@ -296,10 +296,15 @@ multi.plot.probs <-
     ## -- Plot predicted probabilities + CIs -- ##
     ## Get X label: if no label specified in arguments, default is variable label in data.set or
     ## variable name if unlabeled
-    if(is.null(xval.lab)){
-      ## Is xval labeled in original data set?
-      xval.lab <- Hmisc::label(data.set[,xval])
-      xval.lab <- ifelse(xval.lab == '', xval, xval.lab)
+    if(!xval.lab){
+      use.xlab <- p.text
+    } else{
+      if(is.null(xval.lab)){
+        ## Is xval labeled in original data set?
+        xval.lab <- Hmisc::label(data.set[,xval])
+        xval.lab <- ifelse(xval.lab == '', xval, xval.lab)
+      }
+      use.xlab <- paste(xlab, p.text, sep = '\n\n')
     }
 
     xval.probs <- ggplot(aes(x = xval.vals, y = pp), data = pp.data) +
@@ -307,7 +312,7 @@ multi.plot.probs <-
       geom_ribbon(aes(ymin = lcl, ymax = ucl), fill = 'grey80', alpha = alpha.lev) +
       geom_line(aes(colour = outcome)) +
       scale_colour_discrete(guide = FALSE) +
-      scale_x_continuous(name = paste(xval.lab, p.text, sep = '\n\n')) +
+      scale_x_continuous(name = use.xlab) +
       scale_y_continuous(limits = yval.limits, name = yval.lab)
 
     ## -- Plot raw data -- ##
