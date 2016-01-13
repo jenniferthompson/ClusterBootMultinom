@@ -29,6 +29,8 @@
 #' @param plot.raw Add raw data to plots? Defaults to TRUE.
 #' @param xval.lab String to combine with Wald p-values for X axis label. If not specified, defaults
 #'   to either label of data.set[,xval] if labelled, or xval if not labeled.
+#' @param pvals.oneline Whether to print Wald p-values on a single line or separate lines. Defaults
+#'   to separate lines.
 #' @param yval.lab String to use for Y axis label. Defaults to 'Adjusted Probability of Outcome.'
 #' @param yval.limits Numeric vector for Y axis limits. Defaults to c(0, 1).
 #' @param alpha.lev Numeric value for transparency level of CI ribbons. Defaults to 1.
@@ -106,6 +108,7 @@ multi.plot.probs <-
     vcov.list = NULL, ## list of variance-covariance matrices
     plot.raw = TRUE, ## Add raw data to final plot?
     xval.lab = NULL, ## X axis label (in addition to p-values)
+    pvals.oneline = FALSE, ## whether to print p-values on a single line
     yval.lab = 'Adjusted Probability of Outcome', ## Y axis label
     yval.limits = c(0, 1), ## limits for Y axis
     alpha.lev = 1 ## transparency level of CI ribbons
@@ -279,6 +282,8 @@ multi.plot.probs <-
                          do.call(rbind, lapply(wald.vals, FUN = function(x){ x$result$chi2 })))
 
     ## Create string to place at bottom of plot
+    if(pvals.oneline){ pval.sep = '; ' } else{ pval.sep = '\n' }
+
     p.text <- paste0('Bootstrapped Wald P-Values:\n',
                      paste(unlist(lapply(1:nrow(comparisons), FUN = function(x){
                        paste0(comparisons[x, 'comp'], ': p',
@@ -286,7 +291,7 @@ multi.plot.probs <-
                                      ifelse(comparisons[x, 'P'] < 0.001, ' < 0.001',
                                             paste(' =', format(round(comparisons[x, 'P'], 3), nsmall = 3)))))
                      })),
-                     collapse = '\n'))
+                     collapse = pval.sep))
 
     ## -- Plot predicted probabilities + CIs -- ##
     ## Get X label: if no label specified in arguments, default is variable label in data.set or
