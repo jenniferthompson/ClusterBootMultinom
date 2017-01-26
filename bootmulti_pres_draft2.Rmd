@@ -1,0 +1,408 @@
+---
+title: "Multinomial Regression for Correlated Data Using the Bootstrap in R"
+author: Jennifer Thompson, MPH & Rameela Chandrasekhar, PhD, Vanderbilt University
+date: "August 9, 2015"
+fontsize: 13.5pt
+output:
+  beamer_presentation:
+    incremental: false
+---
+
+```{r setopts, echo=FALSE, message=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, cache = FALSE, error = FALSE, results='hide', fig.align='center', fig.pos='!h')
+
+knitr::knit_hooks$set(mysize = function(before, options, envir) {
+  if (before) 
+    return(options$size)
+})
+
+options(width = 100)
+```
+
+# Purpose
+  - Multinomial logistic regression: Useful for outcomes with >2 levels without inherent order
+  - Model fits (# levels - 1) coefficients for each variable
+  - Some methods exist in R, including:
+    - VGAM package: `vglm()` with `family = multinomial()`
+    - multgee package: `nomLORgee()`
+  - To our knowledge, neither method allows us to easily get SEs/confidence intervals for predicted probabilities
+    
+# Proposed Method: Clustered Bootstrapped Multinomial Regression
+  - Given data set with N subjects and $m_n$ records per subject, use clustered bootstrap sampling to create B data sets
+    - Sample N subject IDs with replacement
+    - Take all $m_n$ records from each sampled ID
+  - Fit multinomial model on each of B data sets
+
+# Proposed Method: Clustered Bootstrapped Multinomial Regression
+  - *Coefficients:* Estimates = means of B estimates
+  - *CIs:* Percentile method; ($2.5^{th}$, $97.5^{th}$)
+  - *P-values:* Wald test
+  - *Predicted probability* of an outcome level: Estimates straightforward; for CIs, use method in Liu's *Survival Analysis: Models and Applications* Appendix B
+  - Functions collected in **[ClusterBootMultinom](http://github.com/jenniferthompson/ClusterBootMultinom/ "ClusterBootMultinom")** package on Github (github.com/jenniferthompson/ClusterBootMultinom)
+  
+```{r examplesetup, echo=FALSE}
+## Load analysis data set
+load('multibootstrap_data.Rdata')
+
+## How many patients have >=1 day available?
+n.pts <- length(unique(our.data$id))
+
+library(ClusterBootMultinom)
+
+# source('create_sampdata.R')
+# source('multi_bootstrap.R')
+# source('boot_coef_plot.R')
+
+```
+
+# Motivating Example
+  - Cohort of critically ill patients with data collected daily in the ICU
+  - Outcome: Mental status, assessed daily while in hospital; could be normal, delirious or comatose
+  - Cannot assume that coma is worse than delirium
+  - Exposure: Levels of a biomarker measured on study days 1, 3, and 5, if patient remained in the hospital
+  - Most confounders also measured daily in the ICU
+  - **Main question:** After adjusting for confounders, are biomarker levels associated with mental status on the day following biomarker measurement?
+  - Final data: `r n.pts` unique patients with >=1 day of complete data; `r nrow(our.data)` total patient-days
+
+```{r setuphide, echo=FALSE}
+## Libraries used
+library(VGAM)    ## for vglm()
+library(ggplot2) ## for plotting
+library(rms)     ## for using rcs() in model fits
+library(aod)     ## for Wald tests
+library(dplyr)
+library(tidyr)   ## for faster data management
+```
+
+# Create Data Sets
+
+```{r libraries, mysize=TRUE, size='\\small'}
+# library(devtools)
+# install_github('jenniferthompson/ClusterBootMultinom')
+
+library(ClusterBootMultinom)
+nboot <- 1000 ## Set number of bootstraps
+
+```
+
+Using **`create.sampdata()`**,
+
+  - Create a list of B (here, `r nboot`) data sets, plus extra in case of nonconvergence
+  - Each has all records from `r n.pts` IDs sampled with replacement from set of original IDs
+
+```{r createsampdata, echo=TRUE, results='markup', mysize = TRUE, size='\\small'}
+boot.datasets <-
+  create.sampdata(org.data = our.data,
+                  id.var = 'id',
+                  n.sets = ceiling(nboot * 1.25))
+
+```
+```{r loadsampdata, echo=FALSE}
+## Save to .Rdata file to save time on next run
+save(boot.datasets,
+     file = 'bootmulti_datasets.Rdata')
+
+# load('bootmulti_datasets.Rdata')
+```
+
+# Run Models on Bootstrapped Data Sets
+
+Using **`multi.bootstrap()`**:
+
+  - Run model on original data set
+  - If that model converges, run the same model on bootstrapped data sets until we reach B converged models
+  - Save errors and warnings to .txt file
+  - To calculate CIs for predicted probabilities for all outcome levels, run models twice, using highest & lowest outcome levels as reference
+
+```{r multibootstrapform, echo=FALSE}
+mod.formula.string <- 'mod.formula <- \n as.formula(mental.tmw ~ age + rcvd.ster +\n  sevsepsis + sofa.mod + as.factor(study.day) +\n  rcs(marker, 3))'
+
+mod.formula <- as.formula(gsub('\\)$', '',
+                               gsub('mod.formula <- \n as.formula(', '',
+                                    gsub('\n  ', '', mod.formula.string, fixed = TRUE),
+                                    fixed = TRUE)))
+
+```
+```{r printmultibootstrapform, echo=FALSE, results='markup', mysize=TRUE, size = '\\small'}
+cat(mod.formula.string)
+```
+
+# Run Models on Bootstrapped Data Sets
+
+```{r multibootstrapnormal, echo=TRUE, mysize=TRUE, size='\\small'}
+## Run with Normal as reference level
+boot.models.n <-
+  multi.bootstrap(
+    org.data = our.data,
+      ## original data set
+    data.sets = boot.datasets,
+      ## list of bootstrapped data sets
+    ref.outcome = grep('Normal', levels(our.data$mental.tmw)),
+      ## outcome level to use as reference
+    multi.form = mod.formula,
+      ## model formula
+    n.boot = nboot,
+      ## number of successful model fits desired
+    xvar = 'Marker')
+      ## text for status updates
+
+```
+ **Returns** list: model fit on original data; list of `r nboot` successful model fits; number of times model failed to converge
+
+```{r multibootstrapcoma, echo=FALSE}
+# Run with Comatose as reference level
+boot.models.c <-
+  multi.bootstrap(org.data = our.data,
+                  data.sets = boot.datasets,
+                  ref.outcome = grep('Comatose', levels(our.data$mental.tmw)),
+                  multi.form = mod.formula,
+                  n.boot = nboot,
+                  xvar = 'Marker')
+
+## Get outcome comparisons for model sets to pass to plotting functions
+get.out.comp <- function(org.mod){
+  lapply(org.mod@misc$predictors.names, FUN = function(x){
+    tmp <- strsplit(gsub('][\\)]*', '', gsub('[log\\(]*mu\\[,', '', x)), '/')
+    return(paste(unlist(lapply(tmp, FUN = function(y){ levels(our.data$mental.tmw)[as.numeric(y)] })),
+                 collapse = ' vs. '))
+  })
+}
+
+out.comp.n <- get.out.comp(boot.models.n$org.model)
+out.comp.c <- get.out.comp(boot.models.c$org.model)
+
+```
+
+```{r savebootcoefs, echo=FALSE}
+## Keep only coefficients, as lists; create coefficient and vcov matrices
+boot.coefs.n <-
+  lapply(boot.models.n$boot.models,
+         FUN = function(x){ return(x@coefficients) })
+boot.matrix.n <- do.call('rbind', boot.coefs.n)
+boot.vcov.n <- var(boot.matrix.n)
+
+boot.coefs.c <-
+  lapply(boot.models.c$boot.models,
+         FUN = function(x){ return(x@coefficients) })
+boot.matrix.c <- do.call('rbind', boot.coefs.c)
+boot.vcov.c <- var(boot.matrix.c)
+
+## Save original model fits
+org.mod.n <- boot.models.n$org.model
+org.mod.c <- boot.models.c$org.model
+
+```
+```{r loadbootcoefs, echo=FALSE}
+save(org.mod.n, boot.matrix.n, boot.vcov.n,
+     org.mod.c, boot.matrix.c, boot.vcov.c,
+     file = 'boot_orgmodcoefs.Rdata')
+
+# load('boot_orgmodcoefs.Rdata')
+```
+
+-----------
+
+#### Check Distribution of Coefficients using **`boot.coef.plot()`** ####
+
+```{r checkdistnormal, echo=FALSE, results='markup', include=TRUE, fig.height=4.25, fig.width=7, fig.align='center'}
+## Histograms of bootstrapped coefficients
+## Add reference lines for original and mean of bootstrapped coefficients
+
+coefplot.n <- boot.coef.plot(coef.matrix = boot.matrix.n,
+                             org.coefs = org.mod.n@coefficients,
+                             plot.ints = FALSE)
+coefplot.n$coef.plot + ggtitle('Reference = Normal')
+
+```
+```{r checkdistcoma, echo=FALSE}
+# coefplot.c <- boot.coef.plot(coef.matrix = boot.matrix.c,
+#                              org.coefs = org.mod.c@coefficients,
+#                              plot.ints = TRUE)
+# coefplot.c$coef.plot + ggtitle('Reference = Comatose')
+```
+
+
+# Calculate Odds Ratios
+
+Use **`multi.plot.ors()`** to show ORs, 95% CIs for each outcome comparison.
+
+```{r confoundersprep, echo=FALSE}
+## Setup: Create data frame of variable labels to use in plots
+or.labels <- data.frame(variable = c('age', 'rcvd.ster', 'sevsepsisSeverely septic today',
+                                     'sofa.mod', 'as.factor(study.day)3',
+                                     'as.factor(study.day)5'),
+                        var.label = c('Age at enrollment',
+                                      'Received steroid',
+                                      'Severe sepsis',
+                                      'Modified SOFA',
+                                      'Study day 3 vs 1',
+                                      'Study day 5 vs 1'))
+
+# source('get_or_results.R')
+# source('multi_plot_ors.R')
+
+```
+
+```{r confounderors, echo=TRUE, results='markup', mysize=TRUE, size='\\footnotesize'}
+## Plot odds ratios and CIs for non-biomarker variables
+covariate.ors <-
+  multi.plot.ors(
+    coef.list = list(boot.matrix.n, boot.matrix.c),
+      ## List of matrices with bootstrapped coefs
+    label.data = or.labels,
+      ## data frame containing labels for each variable
+    remove.vars = 'marker',
+      ## this plot is just for confounders
+    round.vars = 'age', round.digits = 3,
+      ## round results for age to 3 instead of 2 places
+    out.strings.list = list(out.comp.n, out.comp.c),
+      ## list of strings describing comparisons
+    delete.row = 'Normal vs. Comatose')
+      ## One comparison will be redundant
+
+```
+**Returns** list: data frame with numeric results, ggplot2 object showing results
+
+-----------
+```{r confounderorplot, echo=TRUE, include=TRUE, fig.width=7, fig.height=5.5}
+covariate.ors$or.plot
+```
+
+
+# Create Design Matrices
+
+```{r designmats, echo=FALSE}
+## Function to find mode of categorical variable
+get.mode <- function(mode.var){ return(names(which.max(table(mode.var)))) }
+
+## Create vector of adjustment values
+adjvals <-
+  c(1,                                                                    ## Intercept
+    median(our.data$age, na.rm = TRUE),                                  ## Age
+    as.numeric(get.mode(our.data$rcvd.ster)),                            ## Steroid use
+    grep(get.mode(our.data$sevsepsis), levels(our.data$sevsepsis)) - 1, ## Severe sepsis
+    median(our.data$sofa.mod, na.rm = TRUE),                             ## SOFA
+    0, 0)                                                                 ## Study day = 1
+
+## Create two rows, one for "outcome 1" and one for "outcome 2"
+## Rows will later be repeated * number of unique biomarker values
+design.out1 <- unlist(lapply(1:(length(adjvals)*2), FUN = function(i){
+  if(i %% 2 == 1){ adjvals[i %/% 2 + 1] } else{ 0 } }))
+design.out2 <- unlist(lapply(1:(length(adjvals)*2), FUN = function(i){
+  if(i %% 2 == 0){ adjvals[i %/% 2] } else{ 0 } }))
+
+```
+
+To get predicted probabilities for outcomes vs. a continuous covariate, we need to adjust all other covariates to specific values.
+
+  - Pass **`multi.plot.probs()`** [# outcome levels - 1] numeric vectors
+  - Functions assume covariate in question is **last** variable in model formula; its X values will become columns at the end of design matrices
+  - Example has $\beta_{0_{1, 2}}$ + 6 other $\beta$ per outcome level, excluding biomarker; set each to median/mode, representing "average" patient
+
+```{r printdesignmats, echo=FALSE, results='markdown', mysize=TRUE, size='\\tiny'}
+rbind(design.out1, design.out2)
+```
+
+
+# Calculate & Plot Predicted Probabilities, CIs of Each Mental Status by Marker Level
+
+```{r predprobsprep, echo=FALSE}
+# source('calc_spline.R')
+# source('multi_calcppci.R')
+# source('multi_plot_probs.R')
+
+```
+
+```{r predprobs, echo=TRUE, results='markup', mysize=TRUE, size='\\small'}
+## Predicted probabilities for
+##  outcome levels vs. biomarker
+marker.prob.results <-
+  multi.plot.probs(
+    xval = 'marker',
+    data.set = our.data,
+    design.mat = list(design.out1, design.out2),
+    mod.objs = list(boot.models.n$org.model,
+                    boot.models.c$org.model),
+    coef.list = list(boot.matrix.n,
+                     boot.matrix.c),
+    vcov.list = list(boot.vcov.n,
+                     boot.vcov.c))
+
+```
+**Returns** list: data frame with numeric results, ggplot2 object showing results
+
+----------
+```{r printprobplot, echo=TRUE, include=TRUE, fig.height=4.75, fig.width=7}
+marker.prob.results$prob.line.plot
+```
+
+
+# Simulation Study
+  - Compared our method with
+    1. `vglm()` from VGAM, without accounting for correlation
+    2. `nomLORgee()` from multgee package, which accounts for correlation
+  - Simulated 1000 data sets with correlated multinomial data, based on example from SimCorMultRes package
+    - data sets included ID, time (cluster size = 3), one X ~ *N*(2.5, 3), outcome with *I* = 4 levels
+    - all $\beta_{0i,...,I-1}$ = 1, all $\beta_{1i,...,I-1}$ = 2
+    - correlation within patient = 0.9
+    - N = 50, 150, 500
+
+```{r exampledata, echo=FALSE, message=FALSE}
+library(SimCorMultRes)
+
+## Initialize number of patients, response categories, repeated measures per patient
+npts <- 500
+ncats <- 4
+ntimes <- 3
+
+## Initialize beta coefficients - keep it simple!
+betas0 <- c(rep(1, ncats - 1), 0)
+betas1 <- c(rep(2, ncats - 1), 0)
+
+## Set correlation matrix
+cormat <- toeplitz(c(1, rep(0, ncats - 1), rep(c(0.9, rep(0, (ncats - 1))), ntimes - 1)))
+
+set.seed(1)
+xmat <- matrix(rnorm(npts, 2.5, 3), npts, ncats)
+
+lpmat <- matrix(betas1, npts, ncats, byrow = TRUE) * xmat + matrix(betas0, npts, ncats, byrow = TRUE)
+lpmat <- matrix(lpmat, npts, ncats * ntimes)
+
+yvals <- rmult.bcl(clsize = ntimes, ncategories = ncats, lin.pred = lpmat, cor.matrix = cormat)$Ysim
+
+data <- data.frame(cbind(c(t(yvals)), c(t(xmat[,-ncats]))))
+data$id <- rep(1:npts, each = ntimes)
+data$time <- rep(1:ntimes, npts)
+colnames(data) <- c("y","x","id","time")
+
+```
+
+# Model Convergence
+
+Proportions of models which did not converge:
+
+Method              | N = 50 | N = 150 | N = 500
+------------------- |:------:|:-------:|:------:
+`nomLORgee()`       |   0.49 |    0.18 |   0.08
+`vglm()`            |   0.14 |    0.01 |   0.01
+Clustered bootstrap |   0.33 |    0.03 |   0.01
+
+# Relative Efficiency, Bias & CIs
+
+![Combined results](simulated_allresults.pdf)
+
+# Future Work & Acknowledgements
+  - Future directions
+    - Additional CI methods
+    - Extending package to include more nonlinear terms, other flexibilities
+  - Clinical investigators & coauthors:
+    - Tim Girard, MD, MSCI
+    - Pratik Pandharipande, MD, MSCI
+    - Wes Ely, MD, MPH
+  - R package resources:
+    - Hilary Parker - [Writing an R Package from Scratch](http://hilaryparker.com/2014/04/29/writing-an-r-package-from-scratch/)
+    - Hadley Wickham - devtools, roxygen2, *[R Packages](http://r-pkgs.had.co.nz/)*
+    - Karl Broman - [R package primer](http://kbroman.org/pkg_primer/)
+    - Jeremy Stephens, VUMC computer systems analyst
+  - Email: jennifer.l.thompson@vanderbilt.edu
+  - Package: [github.com/jenniferthompson/ClusterBootMultinom](http://www.github.com/jenniferthompson/ClusterBootMultinom)
