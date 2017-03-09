@@ -65,6 +65,11 @@ boot.fits.a <- multi.bootstrap(org.data = df,
                                ref.outcome = grep('A', levels(df$y)),
                                multi.form = as.formula('y ~ x1 + x2'))
 
+## Create matrices of coefficients for all bootstrap fits
+boot.matrix.a <- do.call(rbind,
+                         lapply(boot.fits.a$boot.models,
+                                FUN = function(x){ x@coefficients }))
+
 ## Calculate and plot odds ratios and CIs, Wald p-values for x2
 covariate.ors <- multi.plot.ors(coef.list = list(boot.matrix.a),
                                 out.strings = list(c('B vs A', 'C vs A')),

@@ -40,9 +40,9 @@
 #'
 #' ## Check distribution of bootstrapped estimates
 #' coefplot.a <- boot.coef.plot(coef.matrix = boot.matrix.a,
-#'                              org.coefs = summary(boot.fits.a$org.mod)@@coefficients,
+#'                              org.coefs = boot.fits.a$org.model@@coefficients,
 #'                              plot.ints = FALSE)
-#' coefplot.a$coef.plot + ggtitle('Reference = A')
+#' coefplot.a$coef.plot + ggplot2::ggtitle('Reference = A')
 
 boot.coef.plot <- function(coef.matrix,         ## matrix of bootstrapped coefficients (columns = coef)
                            org.coefs,           ## vector of coefficients from original model

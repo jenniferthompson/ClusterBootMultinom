@@ -50,9 +50,9 @@ boot.matrix.a <- do.call(rbind,
 
 ## Check distribution of bootstrapped estimates
 coefplot.a <- boot.coef.plot(coef.matrix = boot.matrix.a,
-                             org.coefs = summary(boot.fits.a$org.mod)@coefficients,
+                             org.coefs = boot.fits.a$org.model@coefficients,
                              plot.ints = FALSE)
-coefplot.a$coef.plot + ggtitle('Reference = A')
+coefplot.a$coef.plot + ggplot2::ggtitle('Reference = A')
 }
 \seealso{
 Uses ggplot2 and dplyr.
